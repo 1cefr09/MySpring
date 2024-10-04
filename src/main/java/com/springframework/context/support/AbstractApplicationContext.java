@@ -149,16 +149,20 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
                 * 进行注入时，依赖的 bean 可能还没有实例化，所以这里需要判断一下
                 * */
                 // 尝试从缓存中获取实例
+                //尝试过后，发现不能使用getBean调用，因为getBean需要传入beanName，而这里的beanName是autowiredBeanName也就是类名
                 BeanWrapper beanWrapper = this.factoryBeanInstanceCache.get(autowiredBeanName);
                 if (beanWrapper == null) {
                     // 如果没有找到，则调用 getBean 方法
-                    Object bean = getBean(autowiredBeanName);
+                    String simpleBeanName = autowiredBeanName.substring(autowiredBeanName.lastIndexOf(".") + 1);
+                    simpleBeanName = Character.toLowerCase(simpleBeanName.charAt(0)) + simpleBeanName.substring(1);
+                    Object bean = getBean(simpleBeanName);
                     if (bean != null) {
                         field.set(instance, bean);
                     }
                 } else {
                     field.set(instance, beanWrapper.getWrappedInstance());
                 }
+//                field.set(instance, beanWrapper.getWrappedInstance());
             } catch (IllegalAccessException e) {
                 e.printStackTrace();
             }
