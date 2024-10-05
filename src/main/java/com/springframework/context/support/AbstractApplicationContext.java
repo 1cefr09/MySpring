@@ -8,6 +8,7 @@ import com.springframework.beans.factory.support.DefaultListableBeanFactory;
 import com.springframework.context.ApplicationContext;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +51,13 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
      */
     private void doRegisterBeanDefinition(List<BeanDefinition> beanDefinitions) throws Exception {
         for (BeanDefinition beanDefinition : beanDefinitions) {
+            Class<?> clazz = Class.forName(beanDefinition.getBeanClassName());
+//            if (!(clazz.isAnnotationPresent(Component.class) ||
+//                    clazz.isAnnotationPresent(Controller.class) ||
+//                    clazz.isAnnotationPresent(Service.class) ||
+//                    clazz.isAnnotationPresent(Repository.class))) {
+//                continue; // 跳过没有注解的类
+//            }
             if (super.beanDefinitionMap.containsKey(beanDefinition.getFactoryBeanName())) {
                 throw new Exception(beanDefinition.getFactoryBeanName() + "已经存在！");
             }
@@ -137,7 +145,7 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
             if (!field.isAnnotationPresent(Autowired.class)) {
                 continue;
             }
-
+            Class<?> fieldType = field.getType();
             String autowiredBeanName = field.getType().getName();//先获取属性的类型，再获取类型的全类名
 
             field.setAccessible(true);
@@ -152,12 +160,39 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
                 //尝试过后，发现不能使用getBean调用，因为getBean需要传入beanName，而这里的beanName是autowiredBeanName也就是类名
                 BeanWrapper beanWrapper = this.factoryBeanInstanceCache.get(autowiredBeanName);
                 if (beanWrapper == null) {
-                    // 如果没有找到，则调用 getBean 方法
-                    String simpleBeanName = autowiredBeanName.substring(autowiredBeanName.lastIndexOf(".") + 1);
-                    simpleBeanName = Character.toLowerCase(simpleBeanName.charAt(0)) + simpleBeanName.substring(1);
-                    Object bean = getBean(simpleBeanName);
-                    if (bean != null) {
-                        field.set(instance, bean);
+                    if (fieldType.isInterface()){//如果是接口
+                        List<Class<?>> implClasses = findImplementationClasses(fieldType);
+                        if (implClasses.size() > 1){
+                            if (field.isAnnotationPresent(Qualifier.class)) {
+                                String qualifierValue = field.getAnnotation(Qualifier.class).value();
+                                for (Class<?> implClass : implClasses) {
+                                    if (implClass.getSimpleName().equals(qualifierValue)) {
+                                        Object bean = getBean(implClass.getSimpleName());
+                                        if (bean != null) {
+                                            field.set(instance, bean);
+                                        }
+                                        break;
+                                    }
+                                }
+                            } else {
+                                throw new Exception("多个实现类存在，请使用 @Qualifier 注解指定具体的实现类: " + fieldType.getName());
+                            }
+                        }else{
+                            String simpleBeanName = implClasses.get(0).getSimpleName();
+                            simpleBeanName = Character.toLowerCase(simpleBeanName.charAt(0)) + simpleBeanName.substring(1);
+                            Object bean = getBean(simpleBeanName);
+                            if (bean != null) {
+                                field.set(instance, bean);
+                            }
+                        }
+                    }else {
+                        // 如果没有找到，则调用 getBean 方法
+                        String simpleBeanName = autowiredBeanName.substring(autowiredBeanName.lastIndexOf(".") + 1);
+                        simpleBeanName = Character.toLowerCase(simpleBeanName.charAt(0)) + simpleBeanName.substring(1);
+                        Object bean = getBean(simpleBeanName);
+                        if (bean != null) {
+                            field.set(instance, bean);
+                        }
                     }
                 } else {
                     field.set(instance, beanWrapper.getWrappedInstance());
@@ -165,7 +200,25 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
 //                field.set(instance, beanWrapper.getWrappedInstance());
             } catch (IllegalAccessException e) {
                 e.printStackTrace();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
             }
         }
     }
+
+    // 查找接口所有实现类的方法
+    private List<Class<?>> findImplementationClasses(Class<?> interfaceClass) throws Exception {
+        List<Class<?>> implementationClasses = new ArrayList<>();
+        for (BeanDefinition beanDefinition : super.beanDefinitionMap.values()) {
+            Class<?> clazz = Class.forName(beanDefinition.getBeanClassName());
+            if (interfaceClass.isAssignableFrom(clazz) && !clazz.isInterface()) {
+                implementationClasses.add(clazz);
+            }
+        }
+        if (implementationClasses.isEmpty()) {
+            throw new Exception("未找到接口的实现类: " + interfaceClass.getName());
+        }
+        return implementationClasses;
+    }
+
 }

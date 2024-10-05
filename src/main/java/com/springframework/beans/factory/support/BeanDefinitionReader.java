@@ -60,10 +60,10 @@ public class BeanDefinitionReader {
                 //调用 doCreateBeanDefinition 方法创建 BeanDefinition 对象，并将其添加到结果列表中
                 result.add(doCreateBeanDefinition(toLowerFirstCase(beanClass.getSimpleName()), beanClass.getName()));
 
-                Class<?>[] interfaces = beanClass.getInterfaces();//获取类实现的所有接口
-                for (Class<?> anInterface : interfaces) {//
-                    result.add(doCreateBeanDefinition(anInterface.getName(), beanClass.getName()));
-                }
+//                Class<?>[] interfaces = beanClass.getInterfaces();//获取类实现的所有接口
+//                for (Class<?> anInterface : interfaces) {//
+//                    result.add(doCreateBeanDefinition(anInterface.getName(), beanClass.getName()));
+//                }
             }
         } catch (ClassNotFoundException e) {
             e.printStackTrace();

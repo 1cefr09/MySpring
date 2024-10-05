@@ -58,7 +58,7 @@ public class HandlerAdapter {
         Object[] paramValues = new Object[paramTypes.length];
 
         // 设置由@RequestParam标记的参数
-        for (Map.Entry<String, String[]> param : requestParamMap.entrySet()) {
+        for (Map.Entry<String, String[]> param : requestParamMap.entrySet()) {// 遍历request中的参数列表
             String value = Arrays.toString(param.getValue()).replaceAll("\\[|\\]", "");
             // 如果方法的形参列表中不存在该参数则跳过
             if (!paramMapping.containsKey(param.getKey())) {
@@ -67,7 +67,7 @@ public class HandlerAdapter {
             // 获取该参数在形参列表中的下标
             int index = paramMapping.get(param.getKey());
             // 参数类型转换
-            paramValues[index] = caseStringValue(value, paramTypes[index]);
+            paramValues[index] = caseStringValue(value, paramTypes[index]);//调用 caseStringValue 方法，将 value 转换为目标方法参数的类型
         }
 
         // 设置request参数
