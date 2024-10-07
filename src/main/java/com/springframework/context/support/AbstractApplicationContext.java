@@ -3,6 +3,7 @@ package com.springframework.context.support;
 import com.springframework.annotation.*;
 import com.springframework.beans.BeanWrapper;
 import com.springframework.beans.factory.config.BeanDefinition;
+import com.springframework.beans.factory.config.BeanPostProcessor;
 import com.springframework.beans.factory.support.BeanDefinitionReader;
 import com.springframework.beans.factory.support.DefaultListableBeanFactory;
 import com.springframework.context.ApplicationContext;
@@ -14,50 +15,31 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * <p>容器抽象类</p>
- * @author Bosen
- * @date 2021/9/10 15:19
- */
 public abstract class AbstractApplicationContext extends DefaultListableBeanFactory implements ApplicationContext {
 
     protected BeanDefinitionReader reader;
 
-    //继承父类的beanDefinitionMap，用于存放bd的map
-
-    /**
-     * <p>保存单例对象</p>
-     */
     private Map<String, Object> factoryBeanObjectCache = new HashMap<>();
-
-    /**
-     * <p>保存包装对象</p>
-     * BeanWrapper 包装了实际的 Bean 实例，并提供了对该实例的访问和操作方法
-     */
     private Map<String, BeanWrapper> factoryBeanInstanceCache = new ConcurrentHashMap<>();
+    private List<BeanPostProcessor> beanPostProcessors = new ArrayList<>();
 
     @Override
     public void refresh() throws Exception {
-        // 扫描需要扫描的包，并把相关的类转化为beanDefinition
         List<BeanDefinition> beanDefinitions = reader.loadBeanDefinitions();
-        // 注册，将beanDefinition放入IOC容器存储
         doRegisterBeanDefinition(beanDefinitions);
-        // 将非懒加载的类初始化
+        registerBeanPostProcessors(beanDefinitions);
         doAutowired();
     }
 
-    /**
-     * <p>将beanDefinition放入IOC容器存储</p>
-     */
     private void doRegisterBeanDefinition(List<BeanDefinition> beanDefinitions) throws Exception {
         for (BeanDefinition beanDefinition : beanDefinitions) {
             Class<?> clazz = Class.forName(beanDefinition.getBeanClassName());
-//            if (!(clazz.isAnnotationPresent(Component.class) ||
-//                    clazz.isAnnotationPresent(Controller.class) ||
-//                    clazz.isAnnotationPresent(Service.class) ||
-//                    clazz.isAnnotationPresent(Repository.class))) {
-//                continue; // 跳过没有注解的类
-//            }
+            if (!(clazz.isAnnotationPresent(Component.class) ||
+                    clazz.isAnnotationPresent(Controller.class) ||
+                    clazz.isAnnotationPresent(Service.class) ||
+                    clazz.isAnnotationPresent(Repository.class))) {
+                continue;
+            }
             if (super.beanDefinitionMap.containsKey(beanDefinition.getFactoryBeanName())) {
                 throw new Exception(beanDefinition.getFactoryBeanName() + "已经存在！");
             }
@@ -65,14 +47,20 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
         }
     }
 
-    /**
-     * <p>将非懒加载的类初始化</p>
-     */
+    private void registerBeanPostProcessors(List<BeanDefinition> beanDefinitions) throws Exception {//注册BeanPostProcessor
+        for (BeanDefinition beanDefinition : beanDefinitions) {
+            Class<?> clazz = Class.forName(beanDefinition.getBeanClassName());
+            if (BeanPostProcessor.class.isAssignableFrom(clazz)) {
+                this.beanPostProcessors.add((BeanPostProcessor) clazz.newInstance());
+            }
+        }
+    }
+
     private void doAutowired() {
         for (Map.Entry<String, BeanDefinition> beanDefinitionEntry : super.beanDefinitionMap.entrySet()) {
             String beanName = beanDefinitionEntry.getKey();
             if (!beanDefinitionEntry.getValue().isLazyInit()) {
-                getBean(beanName);//目的是通过 BeanDefinition 实例化 bean，并使用 BeanWrapper 包装，将 BeanWrapper 放入 factoryBeanInstanceCache 所以返回值用不到
+                getBean(beanName);
             }
         }
     }
@@ -81,20 +69,15 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
     public Object getBean(String beanName) {
         BeanDefinition beanDefinition = super.beanDefinitionMap.get(beanName);
         try {
-            //下面会在instantiateBean判断是否已经实例化过，如果实例化过则直接返回
-            // 通过bd实例化bean
             Object instance = instantiateBean(beanDefinition);
             if (instance == null) {
                 return null;
             }
-            // 将实例化后的bean使用bw包装
             BeanWrapper beanWrapper = new BeanWrapper(instance);
-
             this.factoryBeanInstanceCache.put(beanDefinition.getBeanClassName(), beanWrapper);
-
-            // 开始注入操作
+            instance = applyBeanPostProcessorsBeforeInitialization(instance, beanName);//实例化之后，属性填充之前调用
             populateBean(instance);
-
+            instance = applyBeanPostProcessorsAfterInitialization(instance, beanName);//实例化和属性填充之后调用
             return instance;
         } catch (Exception e) {
             e.printStackTrace();
@@ -102,21 +85,16 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
         return null;
     }
 
-    /**
-     * <p>通过bd，实例化bean</p>
-     */
     private Object instantiateBean(BeanDefinition beanDefinition) {
         Object instance = null;
         String className = beanDefinition.getBeanClassName();
         String factoryBeanName = beanDefinition.getFactoryBeanName();
         try {
-            // 先判断单例池中是否存在该类的实例
             if (this.factoryBeanObjectCache.containsKey(factoryBeanName)) {
                 instance = this.factoryBeanObjectCache.get(factoryBeanName);
             } else {
-                Class<?> clazz = Class.forName(className);//使用 Class.forName 方法加载类
+                Class<?> clazz = Class.forName(className);
                 instance = clazz.newInstance();
-
                 this.factoryBeanObjectCache.put(beanDefinition.getFactoryBeanName(), instance);
             }
         } catch (Exception e) {
@@ -125,12 +103,8 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
         return instance;
     }
 
-    /**
-     * <p>开始注入操作</p>
-     */
     public void populateBean(Object instance) {
-        Class clazz = instance.getClass();
-        // 判断是否有Controller、Service、Component、Repository等注解标记
+        Class<?> clazz = instance.getClass();
         if (!(clazz.isAnnotationPresent(Component.class) ||
                 clazz.isAnnotationPresent(Controller.class) ||
                 clazz.isAnnotationPresent(Service.class) ||
@@ -139,30 +113,20 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
         }
 
         Field[] fields = clazz.getDeclaredFields();
-
         for (Field field : fields) {
-            // 如果属性没有被Autowired标记，则跳过
             if (!field.isAnnotationPresent(Autowired.class)) {
                 continue;
             }
             Class<?> fieldType = field.getType();
-            String autowiredBeanName = field.getType().getName();//先获取属性的类型，再获取类型的全类名
-
+            String autowiredBeanName = field.getType().getName();
             field.setAccessible(true);
 
             try {
-//                field.set(instance, this.factoryBeanInstanceCache.get(autowiredBeanName).getWrappedInstance());
-                /*
-                * 这里和原博客不一样，原博客是直接从缓存中获取实例，但是这样可能会导致循环依赖问题
-                * 进行注入时，依赖的 bean 可能还没有实例化，所以这里需要判断一下
-                * */
-                // 尝试从缓存中获取实例
-                //尝试过后，发现不能使用getBean调用，因为getBean需要传入beanName，而这里的beanName是autowiredBeanName也就是类名
                 BeanWrapper beanWrapper = this.factoryBeanInstanceCache.get(autowiredBeanName);
                 if (beanWrapper == null) {
-                    if (fieldType.isInterface()){//如果是接口
+                    if (fieldType.isInterface()) {
                         List<Class<?>> implClasses = findImplementationClasses(fieldType);
-                        if (implClasses.size() > 1){
+                        if (implClasses.size() > 1) {
                             if (field.isAnnotationPresent(Qualifier.class)) {
                                 String qualifierValue = field.getAnnotation(Qualifier.class).value();
                                 for (Class<?> implClass : implClasses) {
@@ -177,7 +141,7 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
                             } else {
                                 throw new Exception("多个实现类存在，请使用 @Qualifier 注解指定具体的实现类: " + fieldType.getName());
                             }
-                        }else{
+                        } else {
                             String simpleBeanName = implClasses.get(0).getSimpleName();
                             simpleBeanName = Character.toLowerCase(simpleBeanName.charAt(0)) + simpleBeanName.substring(1);
                             Object bean = getBean(simpleBeanName);
@@ -185,8 +149,7 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
                                 field.set(instance, bean);
                             }
                         }
-                    }else {
-                        // 如果没有找到，则调用 getBean 方法
+                    } else {
                         String simpleBeanName = autowiredBeanName.substring(autowiredBeanName.lastIndexOf(".") + 1);
                         simpleBeanName = Character.toLowerCase(simpleBeanName.charAt(0)) + simpleBeanName.substring(1);
                         Object bean = getBean(simpleBeanName);
@@ -197,7 +160,6 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
                 } else {
                     field.set(instance, beanWrapper.getWrappedInstance());
                 }
-//                field.set(instance, beanWrapper.getWrappedInstance());
             } catch (IllegalAccessException e) {
                 e.printStackTrace();
             } catch (Exception e) {
@@ -206,7 +168,6 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
         }
     }
 
-    // 查找接口所有实现类的方法
     private List<Class<?>> findImplementationClasses(Class<?> interfaceClass) throws Exception {
         List<Class<?>> implementationClasses = new ArrayList<>();
         for (BeanDefinition beanDefinition : super.beanDefinitionMap.values()) {
@@ -221,4 +182,21 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
         return implementationClasses;
     }
 
+    private Object applyBeanPostProcessorsBeforeInitialization(Object existingBean, String beanName) throws Exception {
+        Object result = existingBean;
+        for (BeanPostProcessor processor : this.beanPostProcessors) {
+            result = processor.postProcessBeforeInitialization(result, beanName);
+            if (result == null) return null;
+        }
+        return result;
+    }
+
+    private Object applyBeanPostProcessorsAfterInitialization(Object existingBean, String beanName) throws Exception {
+        Object result = existingBean;
+        for (BeanPostProcessor processor : this.beanPostProcessors) {
+            result = processor.postProcessAfterInitialization(result, beanName);
+            if (result == null) return null;
+        }
+        return result;
+    }
 }
