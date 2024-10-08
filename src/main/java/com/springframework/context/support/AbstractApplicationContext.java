@@ -18,9 +18,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public abstract class AbstractApplicationContext extends DefaultListableBeanFactory implements ApplicationContext {
 
     protected BeanDefinitionReader reader;
-
-    private Map<String, Object> factoryBeanObjectCache = new HashMap<>();
-    private Map<String, BeanWrapper> factoryBeanInstanceCache = new ConcurrentHashMap<>();
+    /*
+    * 原博客并没有singletonObjects这个单例池，导致每次getBean时不能直接判断是否实例化过再取回，而是要重复实例化、注入、PostProcessor，这样会导致重复创建代理的问题
+    * */
+    private Map<String,Object> singletonObjects = new ConcurrentHashMap<>();//用于缓存已经实例化的 Bean 对象。键是 Bean 的名称，值是对应的 Bean 实例。
+    private Map<String, Object> factoryBeanObjectCache = new HashMap<>();//用于缓存已经实例化的 Bean 对象。键是 Bean 的工厂名称，值是对应的 Bean 实例。这个缓存用于避免重复实例化相同的 Bean
+    private Map<String, BeanWrapper> factoryBeanInstanceCache = new ConcurrentHashMap<>();//用于缓存已经包装成 BeanWrapper 的 Bean 实例。键是 Bean 的类名，值是对应的 BeanWrapper 实例。这个缓存用于在依赖注入时快速获取已经包装好的 Bean 实例。
     private List<BeanPostProcessor> beanPostProcessors = new ArrayList<>();
 
     @Override
@@ -69,6 +72,9 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
     public Object getBean(String beanName) {
         BeanDefinition beanDefinition = super.beanDefinitionMap.get(beanName);
         try {
+            if(this.singletonObjects.containsKey(beanName)){//如果已经实例化过，直接返回，区别于原博客的并没有这个单例池
+                return this.singletonObjects.get(beanName);
+            }
             Object instance = instantiateBean(beanDefinition);
             if (instance == null) {
                 return null;
@@ -78,6 +84,7 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
             instance = applyBeanPostProcessorsBeforeInitialization(instance, beanName);//实例化之后，属性填充之前调用
             populateBean(instance);
             instance = applyBeanPostProcessorsAfterInitialization(instance, beanName);//实例化和属性填充之后调用
+            singletonObjects.put(beanName,instance);
             return instance;
         } catch (Exception e) {
             e.printStackTrace();

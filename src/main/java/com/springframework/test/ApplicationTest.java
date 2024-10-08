@@ -3,6 +3,7 @@ package com.springframework.test;
 import com.springframework.context.ApplicationContext;
 import com.springframework.context.annotation.AnnotationConfigApplicationContext;
 import com.springframework.test.config.ApplicationConfig;
+import com.springframework.test.service.TestService;
 import com.springframework.test.service.TestServiceImpl;
 
 /**
@@ -12,7 +13,7 @@ import com.springframework.test.service.TestServiceImpl;
 public class ApplicationTest {
     public static void main(String[] args) throws Exception {
         ApplicationContext applicationContext = new AnnotationConfigApplicationContext(ApplicationConfig.class);
-        TestServiceImpl service = (TestServiceImpl) applicationContext.getBean("testServiceImpl");
+        TestService service = (TestService) applicationContext.getBean("testServiceImpl");
 
         service.echo();
     }
