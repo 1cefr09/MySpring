@@ -1,10 +1,5 @@
 package com.springframework.beans;
 
-/**
- * <p>bean的包装类</p>
- * @author Bosen
- * @date 2021/9/10 14:48
- */
 public class BeanWrapper {
     /**
      * <p>回由该对象包装的bean实例</p>

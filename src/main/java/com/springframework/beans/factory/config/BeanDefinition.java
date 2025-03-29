@@ -1,10 +1,5 @@
 package com.springframework.beans.factory.config;
 
-/**
- * <p>保存bean定义相关的信息</p>
- * @author Bosen
- * @date 2021/9/10 14:41
- */
 public class BeanDefinition {
     /**
      * <p>bean对应的全类名</p>

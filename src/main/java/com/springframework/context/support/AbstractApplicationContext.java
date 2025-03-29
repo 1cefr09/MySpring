@@ -32,9 +32,6 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
     // 当前正在创建的Bean名称集合
     private final Set<String> singletonsCurrentlyInCreation = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
-
-//    private Map<String,Object> singletonObjects = new ConcurrentHashMap<>();//用于缓存已经实例化的 Bean 对象。键是 Bean 的名称，值是对应的 Bean 实例。
-    private Map<String, Object> factoryBeanObjectCache = new HashMap<>();//用于缓存已经实例化的 Bean 对象。键是 Bean 的工厂名称，值是对应的 Bean 实例。这个缓存用于避免重复实例化相同的 Bean
     private Map<String, BeanWrapper> factoryBeanInstanceCache = new ConcurrentHashMap<>();//用于缓存已经包装成 BeanWrapper 的 Bean 实例。键是 Bean 的类名，值是对应的 BeanWrapper 实例。这个缓存用于在依赖注入时快速获取已经包装好的 Bean 实例。
     private List<BeanPostProcessor> beanPostProcessors = new ArrayList<>();
 
@@ -195,23 +192,6 @@ public abstract class AbstractApplicationContext extends DefaultListableBeanFact
         return applyPostProcessorsAfterInitialization(bean, beanName);
     }
 
-    private Object instantiateBean(BeanDefinition beanDefinition) {
-        Object instance = null;
-        String className = beanDefinition.getBeanClassName();
-        String factoryBeanName = beanDefinition.getFactoryBeanName();
-        try {
-            if (this.factoryBeanObjectCache.containsKey(factoryBeanName)) {
-                instance = this.factoryBeanObjectCache.get(factoryBeanName);
-            } else {
-                Class<?> clazz = Class.forName(className);
-                instance = clazz.newInstance();
-                this.factoryBeanObjectCache.put(beanDefinition.getFactoryBeanName(), instance);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return instance;
-    }
 
     public void populateBean(Object instance) {
         Class<?> clazz = instance.getClass();

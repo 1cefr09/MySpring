@@ -14,7 +14,7 @@ public class BeanDefinitionReader {
     /**
      * <p>存储扫描出来的bean的全类名</p>
      */
-    private List<String> registryBeanClasses = new ArrayList<>();
+    private List<String> registryBeanClasses = new ArrayList<>();//存储扫描出来的bean的全类名
 
     public BeanDefinitionReader(String scanPackage) throws Exception {
         doScan(scanPackage);
