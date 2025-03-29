@@ -6,7 +6,6 @@ import com.springframework.annotation.RequestMapping;
 import com.springframework.annotation.RequestParam;
 import com.springframework.test.service.TestService;
 import com.springframework.test.service.TestServiceImpl;
-import com.springframework.web.servlet.ModelAndView;
 
 import java.util.HashMap;
 import java.util.Map;

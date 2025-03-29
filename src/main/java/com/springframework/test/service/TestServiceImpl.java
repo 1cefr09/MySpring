@@ -10,6 +10,9 @@ public class TestServiceImpl implements TestService {
     @Autowired
     TestDAO testDAO;
 
+    @Autowired
+    TestServiceImpl testServiceImpl;
+
 
     public void echo() {
         System.out.println(testDAO.echo());
